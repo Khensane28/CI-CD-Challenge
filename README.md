@@ -1,41 +1,113 @@
-# 02_06 Challenge: Develop a CI Workflow
+# 04_08_solution_develop_a_deployment_pipeline
+It's time for a challenge!
 
-## INTRODUCTION
-It’s time for a challenge!
+Your team is excited to use GitHub Actions for their next project.
 
-You’re working with a team of data scientists that are just starting out with GitHub Actions.
+The goal is to develop a model pipeline that provides continuous integration, continuous delivery, and continuous deployment to three different environments.
 
-The team wants to add a continuous integration workflow to their GitHub repo so that all pushes to the main branch are linted using Flake8 and all tests are run using Pytest.
+However, things aren’t lining up.
 
-All code in the repo needs to use a specific version of Pandas, a popular Python library. They have code to test for the version but for some reason the test is failing.
+To start, the workflow jobs are being run in the wrong order.  And while some of the environments will use continuous deployment, others will need to be reviewed before they can be deployed.
 
-They’d also like to find some way to make it easier to summarize the tests being run in the repo.
+They’ve asked you to help them straighten out the pipeline, set up more control for deployment to particular environments, and provide a summary once the pipeline completes.
 
-## REQUIREMENTS
-Help the team set up a continuous integration pipeline using a GitHub Actions starter workflow.
+# Solution
+1. Create a new repo and add the exercise files. Run and observe the provided workflow.
 
-1. Start by creating a new repo and adding the exercise files for this challenge.
+    Move the provided workflow into the `.github/workflows` directory.
 
-    - [requirements.txt](./requirements.txt)
-    - [test_pandas_version.py](./test_pandas_version.py)
+    The provided workflow has `push` and `workflow_dispatch` triggers.  Adding the workflow should start a run.
 
-1. Use the GitHub Actions web interface to create a starter workflow.
-1. Run the workflow and observe the problems the team is referring to.
-1. Fix any errors in the code so that the tests pass successfully.
-1. Update the workflow to add a summary of the tests being run. 
-    1. Update the workflow so that it has permissions to create checks in the Actions interface.  
-    1. Update the call to `pytest` so that it creates a JUnit report named `junit.xml`.
-        
-            python -m pytest --verbose --junit-xml=junit.xml
-            
-    1. Add a new step that uses the [JUnit Report Action](https://github.com/marketplace/actions/junit-report-action) from the GitHub Marketplace:
+    The initial workflow should appear similar to the following:
 
-            - name: Publish Test Report
-            uses: mikepenz/action-junit-report@v3
-            if: success() || failure() # always run even if the previous step fails
-            with:
-                report_paths: '**/junit.xml'
-                detailed_summary: true
-                include_passed: true
+    ![The initial pipeline](./initial-pipeline.png)
 
-This challenge should take about fifteen minutes to complete.
+1. Edit the workflow to place the jobs in order.
+
+   The provided workflow, [initial-pipeline.yml](./initial-pipeline.yml), has some order to it but the jobs are not configured properly to run in sequence.
+
+   Place the jobs in order by adding the `needs` keyword to each job, followed by the correct job.
+
+        build:
+            needs: [integration]
+
+        ...
+
+        test-artifact:
+            needs: [build]
+
+        ...
+
+        development:
+            # Note this job may also depend on `test-artifact`
+            needs: [build]
+
+        ...
+
+        staging:
+            # Note this stage may also depend on `development`
+            needs: [development, test-artifact]
+
+        ...
+
+        test-staging:
+            needs: [staging]
+
+        ...
+
+        production:
+            needs: [test-staging]
+
+        ...
+
+        test-production:
+            needs: [production]
+
+
+1. Configure the following environments:
+
+    - Development
+    - Staging
+    - Production
+
+    These environments can be created from the workflow or from the repository settings.  If they are created in the repository settings, the workflow will still need to be updated to connect them to the associated job.
+
+    When the environments are in place, the workflow should include:
+
+        development:
+            environment: Development
+
+        ...
+
+        staging:
+            environment: Staging
+
+        ...
+
+        production:
+            environment: Production
+
+1. Use continuous deployment for the Development and Staging environments.
+
+    If the `development` and `staging` jobs are in the correct order and configured with `needs` as previously mentioned, this requirement should be satisfied.
+
+1. Protect deployments to the Production environment with a review.
+
+    1. Select `Settings` -> `Environments` -> `production`.
+    1. Select the checkbox next to `Required reviewers`.
+    1. Search for your user name in the field labeled `Add up to 5 or more reviewers`.
+    1. Select `Save protection rules`.
+    1. Run the workflow using the `workflow_dispatch` trigger to confirm the `production` environment prompts for a review before running.
+
+1. Update the summary to indicate all jobs have completed successfully.
+
+    Modify the last step in the `test-production` job so that the `echo` is directed to `>> $GITHUB_STEP_SUMMARY`:
+
+        test-production:
+            ...
+            - run: echo "# Everything completed successfully!" >> $GITHUB_STEP_SUMMARY
+
+## The Updated Workflow
+One solution for this challenge is in [final-pipeline.yml](./final-pipeline.yml)
+
+![The final pipeline](./final-pipeline.png)
